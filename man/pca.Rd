@@ -2,27 +2,51 @@
 % Please edit documentation in R/4_pca.R
 \name{pca}
 \alias{pca}
-\alias{sma}
-\alias{lda}
 \alias{pls}
+\alias{lda}
+\alias{sma}
+\alias{pca,matrix-method}
+\alias{pca,SummarizedExperiment-method}
+\alias{sma,matrix-method}
+\alias{sma,SummarizedExperiment-method}
+\alias{lda,matrix-method}
+\alias{lda,SummarizedExperiment-method}
+\alias{pls,matrix-method}
+\alias{pls,SummarizedExperiment-method}
 \title{Add PCA, SMA, LDA, or PLS}
 \usage{
-pca(object, ndim = 2, minvar = 0, verbose = TRUE)
+pca(object, ...)
 
-sma(object, ndim = 2, minvar = 0, verbose = TRUE)
+pls(object, ...)
 
-lda(object, ndim = 2, minvar = 0, verbose = TRUE)
+lda(object, ...)
 
-pls(object, ndim = 2, minvar = 0, verbose = FALSE)
+sma(object, ...)
+
+\S4method{pca}{matrix}(object, group = NULL, ndim = 2, verbose = TRUE)
+
+\S4method{pca}{SummarizedExperiment}(object, group = NULL, ndim = 2, minvar = 0, verbose = TRUE)
+
+\S4method{sma}{matrix}(object, group = NULL, ndim = NULL, verbose = TRUE)
+
+\S4method{sma}{SummarizedExperiment}(object, ndim = 2, minvar = 0, verbose = TRUE)
+
+\S4method{lda}{matrix}(object, group, ndim = NULL, verbose = TRUE)
+
+\S4method{lda}{SummarizedExperiment}(object, ndim = 2, minvar = 0, verbose = TRUE)
+
+\S4method{pls}{matrix}(object, group, ndim = 2, verbose = FALSE)
+
+\S4method{pls}{SummarizedExperiment}(object, ndim = 2, minvar = 0, verbose = FALSE)
 }
 \arguments{
-\item{object}{SummarizedExperiment}
+\item{object}{SummarizedExperiment/Matrix}
 
 \item{ndim}{number}
 
-\item{minvar}{number}
-
 \item{verbose}{TRUE (default) or FALSE}
+
+\item{minvar}{number}
 }
 \value{
 SummarizedExperiment
@@ -34,10 +58,19 @@ Add sample scores, feature loadings, and dimension variances to object.
 \examples{
 file <- download_data('halama18.metabolon.xlsx')
 object <- read_metabolon(file, plot = FALSE)
-pca(object)  # Principal Component Analysis
-pls(object)  # Partial Least Squares
-lda(object)  # Linear Discriminant Analysis
-sma(object)  # Spectral Map Analysis
+
+pca(exprs(object))
+sdata(pca(object))
+
+pls(object)
+pls(exprs(object), object$subgroup)
+
+lda(object)
+lda(exprs(object), object$subgroup)
+
+sma(object)
+sma(exprs(object))
+
 pca(object, ndim=3)
 pca(object, ndim=Inf, minvar=5)
 }

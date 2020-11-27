@@ -6,7 +6,7 @@
 
 
 #' Switch between nondetect representations
-#' @param object    SummarizedExperiment
+#' @param x         matrix
 #' @param verbose   logical(1)
 #' @return Updated SummarizedExperiment
 #' @examples
@@ -17,89 +17,89 @@
 #' # NaN -> NA (proteingroups ratios)
 #'     file <- load_data('billing16.proteingroups.txt')
 #'     object <- read_proteingroups(file)
-#'     nan_to_na(object, verbose=TRUE)
+#'     exprs(object) %<>% nan_to_na(verbose=TRUE)
 #'
 #' # -Inf -> NA (log2 transformed proteingroups LFQ intensity)
 #'
 #' # NA -> 0
 #'     file <- load_data('halama18.metabolon.xlsx')
-#'     object <- read_metabolon(file)
-#'     na_to_zero(object, verbose = TRUE)
+#'     object <- exprs(read_metabolon(file)
+#'     exprs(object) %<>% na_to_zero(verbose=TRUE)
 #' @noRd
-zero_to_na <- function(object, verbose = FALSE){
-    selector <- exprs(object) == 0
+zero_to_na <- function(x, verbose = FALSE){
+    selector <- x == 0
     if (any(c(selector), na.rm = TRUE)){
         if (verbose) cmessage(
                     paste0('\t\tReplace 0 -> NA for %d/%d values ',
                             '(in %d/%d features and %d/%d samples)'),
                     sum(selector, na.rm=TRUE), nrow(selector)*ncol(selector),
-                    sum(rowAnys(selector)), nrow(object),
-                    sum(colAnys(selector)), ncol(object))
-        exprs(object)[selector] <- NA_real_
+                    sum(rowAnys(selector)), nrow(x),
+                    sum(colAnys(selector)), ncol(x))
+        x[selector] <- NA_real_
     }
-    object
+    x
 }
 
 
 #' @noRd
-nan_to_na <- function(object, verbose = FALSE){
-    selector <- is.nan(exprs(object))
+nan_to_na <- function(x, verbose = FALSE){
+    selector <- is.nan(x)
     if (any(c(selector), na.rm = TRUE)){
         if (verbose) cmessage(
                     paste0( '\t\tReplace NaN -> NA for %d/%d values ',
                             '(in %d/%d features and %d/%d samples)'),
                     sum(selector, na.rm=TRUE), nrow(selector)*ncol(selector),
-                    sum(rowAnys(selector)), nrow(object),
-                    sum(colAnys(selector)), ncol(object))
-        exprs(object)[selector] <- NA_real_
+                    sum(rowAnys(selector)), nrow(x),
+                    sum(colAnys(selector)), ncol(x))
+        x[selector] <- NA_real_
     }
-    object
+    x
 }
 
 
-na_to_zero <- function(object, verbose = FALSE){
-    selector <- is.na(exprs(object))
+na_to_zero <- function(x, verbose = FALSE){
+    selector <- is.na(x)
     if (any(selector)){
         if (verbose) cmessage(
                         paste0( '\t\tReplace NA -> 0 for %d/%d values ',
                                 '(in %d/%d features and %d/%d samples)'),
                         sum(selector), nrow(selector)*ncol(selector),
-                        sum(rowAnys(selector)), nrow(object),
-                        sum(colAnys(selector)), ncol(object))
-        exprs(object)[selector] <- 0
+                        sum(rowAnys(selector)), nrow(x),
+                        sum(colAnys(selector)), ncol(x))
+        x[selector] <- 0
     }
-    object
+    x
 }
 
 
-inf_to_na <- function(object, verbose){
-    selector <- is.infinite(exprs(object))
+inf_to_na <- function(x, verbose){
+    selector <- is.infinite(x)
     if (any(c(selector), na.rm = TRUE)){
         if (verbose) cmessage(
                     paste0(
                         '\t\tReplace -Inf -> NA for %d/%d values ',
                         '(in %d/%d features and %d/%d samples)'),
                     sum(selector, na.rm=TRUE), nrow(selector)*ncol(selector),
-                    sum(rowAnys(selector)), nrow(object),
-                    sum(colAnys(selector)), ncol(object))
-        exprs(object)[selector] <- NA_real_
+                    sum(rowAnys(selector)), nrow(x),
+                    sum(colAnys(selector)), ncol(x))
+        x[selector] <- NA_real_
     }
-    object
+    x
 }
 
 
-minusinf_to_na <- function(object, verbose = FALSE){
-    selector <- exprs(object)==-Inf
+minusinf_to_na <- function(x, verbose = FALSE){
+    selector <- x==-Inf
     if (any(c(selector), na.rm = TRUE)){
         if (verbose) cmessage(
                     paste0( '\t\tReplace -Inf -> NA for %d/%d values ',
                             '(in %d/%d features and %d/%d samples)'),
                     sum(selector, na.rm=TRUE), nrow(selector)*ncol(selector),
-                    sum(rowAnys(selector)), nrow(object),
-                    sum(colAnys(selector)), ncol(object))
-        exprs(object)[selector] <- NA_real_
+                    sum(rowAnys(selector)), nrow(x),
+                    sum(colAnys(selector)), ncol(x))
+        x[selector] <- NA_real_
     }
-    object
+    x
 }
 
 

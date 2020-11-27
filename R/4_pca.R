@@ -6,18 +6,18 @@
 #=============================================================================
 
 #' Flip sign if all expr values are negative
-#' @param object SummarizedExperiment
+#' @param x matrix
 #' @param verbose TRUE (default) or FALSE
-#' @return updated object
+#' @return updated matrix
 #' @noRd
-flip_sign_if_all_exprs_are_negative <- function(object, verbose=TRUE){
-    idx <- !is.na(exprs(object))
-    if (all(sign(exprs(object)[idx])==-1)){
+flip_sign_if_all_exprs_are_negative <- function(x, verbose=TRUE){
+    idx <- !is.na(x)
+    if (all(sign(x[idx])==-1)){
         if (verbose) cmessage(
             '\t\tAll values negative: flip signs to prevent singularities.')
-        exprs(object) %<>% multiply_by(-1)
+        x %<>% multiply_by(-1)
     }
-    object
+    x
 }
 
 
@@ -107,7 +107,7 @@ merge_sdata <- function(object, df, by = 'sample_id'){
 #' Perform a dimension reduction.
 #' Add sample scores, feature loadings, and dimension variances to object.
 #'
-#' @param object  SummarizedExperiment
+#' @param object  SummarizedExperiment/Matrix
 #' @param ndim    number
 #' @param minvar  number
 #' @param verbose TRUE (default) or FALSE
@@ -115,83 +115,113 @@ merge_sdata <- function(object, df, by = 'sample_id'){
 #' @examples
 #' file <- download_data('halama18.metabolon.xlsx')
 #' object <- read_metabolon(file, plot = FALSE)
-#' pca(object)  # Principal Component Analysis
-#' pls(object)  # Partial Least Squares
-#' lda(object)  # Linear Discriminant Analysis
-#' sma(object)  # Spectral Map Analysis
+#'
+#' pca(exprs(object))
+#' sdata(pca(object))
+#'
+#' pls(object)
+#' pls(exprs(object), object$subgroup)
+#'
+#' lda(object)
+#' lda(exprs(object), object$subgroup)
+#'
+#' sma(object)
+#' sma(exprs(object))
+#'
 #' pca(object, ndim=3)
 #' pca(object, ndim=Inf, minvar=5)
 #' @author Aditya Bhagwat, Laure Cougnaud (LDA)
 #' @export
-pca <- function(object, ndim = 2, minvar = 0, verbose = TRUE){
+setGeneric('pca',
+            function(object, ...)  standardGeneric("pca"), signature = "object")
+
+#' @rdname pca
+#' @export
+setGeneric('pls',
+           function(object, ...)  standardGeneric("pls"),  signature = "object")
+
+#' @rdname pca
+#' @export
+setGeneric('lda',
+           function(object, ...)  standardGeneric("lda"),  signature = "object")
+
+#' @rdname pca
+#' @export
+setGeneric('sma',
+           function(object, ...)  standardGeneric("sma"),  signature = "object")
+
+#' @rdname pca
+#' @export
+setMethod("pca", signature("matrix"),
+function(object, group = NULL, ndim=2, verbose=TRUE){
 # Assert
-    assert_is_valid_sumexp(object)
     if (is.infinite(ndim)) ndim <- ncol(object)
     assert_is_a_number(ndim)
     assert_all_are_less_than_or_equal_to(ndim, ncol(object))
-    assert_is_a_number(minvar)
-    assert_all_are_in_range(minvar, 0, 100)
-    . <- NULL
-    if (verbose)  message('\tAdd PCA')
 # Prepare
-    tmpobj <- object
-    tmpobj %<>% inf_to_na(verbose=verbose)
-    tmpobj %<>% nan_to_na(verbose=verbose)
-    tmpobj %<>% rm_missing_in_all_samples(verbose = verbose)
-# (Double) center and (global) normalize
-    row_means <- rowMeans(exprs(tmpobj), na.rm=TRUE)
-    col_means <- colWeightedMeans(exprs(tmpobj), abs(row_means), na.rm = TRUE)
+    object %<>% inf_to_na(verbose=verbose)
+    object %<>% nan_to_na(verbose=verbose)
+    row_means <- rowMeans(object, na.rm=TRUE)
+    col_means <- colWeightedMeans(object, abs(row_means), na.rm = TRUE)
     global_mean <- mean(col_means)
-    exprs(tmpobj) %<>% apply(1, '-', col_means)   %>%   # Center columns
-                        apply(1, '-', row_means)  %>%   # Center rows
-                        add(global_mean)          %>%   # Add doubly subtracted
-                        divide_by(sd(., na.rm=TRUE))    # Normalize
-# Perform PCA
-    pca_res  <- pcaMethods::pca(t(exprs(tmpobj)),
-        nPcs = ndim, scale = 'none', center = FALSE, method = 'nipals')
+    object %<>% apply(1, '-', col_means)  %>%  # Center columns
+                apply(1, '-', row_means)  %>%  # Center rows
+                add(global_mean)          %>%  # Add doubly subtracted
+                divide_by(sd(., na.rm=TRUE))   # Normalize
+# Pca
+    pca_res  <- pcaMethods::pca(t(object), nPcs = ndim, scale = 'none',
+                                center = FALSE, method = 'nipals')
     samples   <- pca_res@scores
     features  <- pca_res@loadings
     variances <- round(100*pca_res@R2)
     colnames(samples)  <- sprintf('pca%d', seq_len(ncol(samples)))
     colnames(features) <- sprintf('pca%d', seq_len(ncol(features)))
     names(variances)   <- sprintf('pca%d', seq_len(length(variances)))
-# Add
-    object %<>% merge_sdata(samples)
-    object %<>% merge_fdata(features)
-    metadata(object)$pca <- variances
-# Filter for minvar
-    object %<>% .filter_minvar('pca', minvar)
-# Return
-    object
-}
-
+    list(samples=samples, features=features, variances=variances)
+})
 
 
 #' @rdname pca
 #' @export
-sma <- function(object, ndim = 2, minvar = 0, verbose = TRUE){
+setMethod("pca", signature("SummarizedExperiment"),
+function(object, group = NULL, ndim=2, minvar=0, verbose=TRUE){
+    # Assert
+        assert_is_valid_sumexp(object)
+        assert_is_a_number(minvar)
+        assert_all_are_in_range(minvar, 0, 100)
+        . <- NULL
+        if (verbose)  message('\tAdd PCA')
+    # Add pca
+        object %<>% rm_missing_in_all_samples(verbose = verbose)
+        out <- pca(exprs(object), ndim=ndim, verbose=verbose)
+        object %<>% merge_sdata(out$samples)
+        object %<>% merge_fdata(out$features)
+        metadata(object)$pca <- out$variances
+    # Filter for minvar
+        object %<>% .filter_minvar('pca', minvar)
+    # Return
+        object
+})
+
+
+#' @rdname pca
+#' @export
+setMethod("sma", signature("matrix"),
+function(object, group = NULL, ndim=NULL, verbose=TRUE){
 # Assert
     if (!requireNamespace('mpm', quietly = TRUE)){
         message("First Biocinstaller::install('mpm'). Then re-run.")
         return(object)
     }
-    assert_is_valid_sumexp(object)
-    if (is.infinite(ndim)) ndim <- ncol(object)
-    assert_is_a_number(ndim)
-    assert_all_are_in_range(ndim, 1, ncol(object))
-    assert_is_a_number(minvar)
-    assert_all_are_in_range(minvar, 0, 100)
-    . <- NULL
-# Preprocess
-    tmpobj <- object
-    tmpobj %<>% minusinf_to_na(verbose = verbose)   # else SVD singular
-    tmpobj %<>% flip_sign_if_all_exprs_are_negative(verbose = verbose)
-    tmpobj %<>% rm_missing_in_some_samples(verbose = verbose)
+# Prepare
+    object %<>% minusinf_to_na(verbose = verbose)   # else SVD singular
+    object %<>% flip_sign_if_all_exprs_are_negative(verbose = verbose)
+    object %<>% extract(rowAlls(!is.na(.)), )
 # Transform
-    df <- data.frame(feature = rownames(tmpobj), exprs(tmpobj))
+    dt <- data.table(feature = rownames(object)) %>% cbind(object)
     mpm_tmp <- mpm::mpm(
-                df, logtrans = FALSE, closure = 'none', center = 'double',
-                normal = 'global', row.weight = 'mean', col.weight = 'constant')
+        dt, logtrans = FALSE, closure = 'none', center = 'double',
+        normal = 'global', row.weight = 'mean', col.weight = 'constant')
     ncomponents <- length(mpm_tmp$contrib)
     mpm_out <- mpm::plot.mpm(mpm_tmp, do.plot=FALSE, dim = seq_len(ncomponents))
 # Extract
@@ -201,25 +231,68 @@ sma <- function(object, ndim = 2, minvar = 0, verbose = TRUE){
     names(samples)   <- sprintf('sma%d', seq_len(ncol(samples)))
     names(features)  <- sprintf('sma%d', seq_len(ncol(features)))
     names(variances) <- sprintf('sma%d', seq_len(length(variances)))
-# Restrict
-    if (is.infinite(ndim)) ndim <- ncol(samples)
-    samples   %<>% extract(, seq_len(ndim), drop = FALSE)
-    features  %<>% extract(, seq_len(ndim), drop = FALSE)
-    variances %<>% extract(  seq_len(ndim))
-# Add
-    object %<>% merge_sdata(samples)
-    object %<>% merge_fdata(features)
-    metadata(object)$sma <- variances
-# Filter for minvar
-    object %<>% .filter_minvar('sma', minvar)
 # Return
-    object
-}
+    list(samples = samples, features = features, variances = variances)
+})
 
 
 #' @rdname pca
 #' @export
-lda <- function(object, ndim = 2, minvar = 0, verbose = TRUE){
+setMethod("sma", signature("SummarizedExperiment"),
+function(object, ndim=2, minvar=0, verbose=TRUE){
+# Assert
+    assert_is_valid_sumexp(object)
+    if (is.infinite(ndim)) ndim <- ncol(object)
+    assert_is_a_number(ndim)
+    assert_all_are_in_range(ndim, 1, ncol(object))
+    assert_is_a_number(minvar)
+    assert_all_are_in_range(minvar, 0, 100)
+    . <- NULL
+# Transform/Restrict/Merge
+    out <- sma(exprs(object), verbose=verbose)
+    if (is.infinite(ndim)) ndim <- ncol(samples)
+    out$samples   %<>% extract(, seq_len(ndim), drop = FALSE)
+    out$features  %<>% extract(, seq_len(ndim), drop = FALSE)
+    out$variances %<>% extract(  seq_len(ndim))
+    object %<>% merge_sdata(out$samples)
+    object %<>% merge_fdata(out$features)
+    metadata(object)$sma <- out$variances
+# Filter for minvar
+    object %<>% .filter_minvar('sma', minvar)
+# Return
+    object
+})
+
+#' @rdname pca
+#' @export
+setMethod("lda", signature("matrix"),
+function(object, group, ndim=NULL, verbose=TRUE){
+# Prepare
+    object %<>% minusinf_to_na(verbose = verbose)         # SVD singular
+    object %<>% flip_sign_if_all_exprs_are_negative(verbose = verbose)
+    object %<>% extract(rowAlls(!is.na(.)), )
+# Transform
+    exprs_t  <- t(object)
+    lda_out  <- suppressWarnings(MASS::lda(exprs_t, grouping = group))
+    features <- lda_out$scaling
+    if (ncol(features)==1) features %<>% cbind(LD2 = 0)
+    exprs_t %<>% scale(center = colMeans(lda_out$means), scale = FALSE)
+    samples  <- exprs_t %*% features
+    variances <- round((lda_out$svd^2)/sum(lda_out$svd^2)*100)
+    if (length(variances)==1) variances <- c(LD1 = variances, LD2 = 0)
+# Rename
+    colnames(samples)  <- sprintf('lda%d', seq_len(ncol(samples)))
+    colnames(features) <- sprintf('lda%d', seq_len(ncol(features)))
+    names(variances)   <- sprintf('lda%d', seq_len(length(variances)))
+# Return
+    list(samples=samples, features=features, variances=variances)
+})
+
+
+#' @rdname pca
+#' @export
+setMethod("lda", signature("SummarizedExperiment"),
+function(object, ndim=2, minvar=0, verbose=TRUE){
 # Assert
     assert_is_valid_sumexp(object)
     nsubgroup <- length(subgroup_levels(object))
@@ -231,43 +304,42 @@ lda <- function(object, ndim = 2, minvar = 0, verbose = TRUE){
     assert_is_a_number(minvar)
     assert_all_are_in_range(minvar, 0, 100)
     . <- NULL
-# Preprocess
-    tmpobj <- object
-    tmpobj %<>% minusinf_to_na(verbose = verbose)         # SVD singular
-    tmpobj %<>% flip_sign_if_all_exprs_are_negative(verbose = verbose)
-    tmpobj %<>% rm_missing_in_some_samples(verbose = verbose)
 # Transform
-    exprs_t  <- t(exprs(tmpobj))
-    lda_out  <- suppressWarnings(
-                    MASS::lda( exprs_t,grouping = sdata(object)$subgroup))
-    features <- lda_out$scaling
-    if (ncol(features)==1) features %<>% cbind(LD2 = 0)
-    exprs_t %<>% scale(center = colMeans(lda_out$means), scale = FALSE)
-    samples  <- exprs_t %*% features
-    variances <- round((lda_out$svd^2)/sum(lda_out$svd^2)*100)
-    if (length(variances)==1) variances <- c(LD1 = variances, LD2 = 0)
-# Rename
-    colnames(samples)  <- sprintf('lda%d', seq_len(ncol(samples)))
-    colnames(features) <- sprintf('lda%d', seq_len(ncol(features)))
-    names(variances)   <- sprintf('lda%d', seq_len(length(variances)))
-# Restrict
-    samples   %<>% extract(, seq_len(ndim), drop = FALSE)
-    features  %<>% extract(, seq_len(ndim), drop = FALSE)
-    variances %<>% extract(  seq_len(ndim))
+    groups <- sdata(object)$subgroup
+    out <- lda(exprs(object), groups=groups, verbose=verbose)
+    out$samples   %<>% extract(, seq_len(ndim), drop = FALSE)
+    out$features  %<>% extract(, seq_len(ndim), drop = FALSE)
+    out$variances %<>% extract(  seq_len(ndim))
 # Merge
-    object %<>% merge_sdata(samples)
-    object %<>% merge_fdata(features)
-    metadata(object)$sma <- variances
+    object %<>% merge_sdata(out$samples)
+    object %<>% merge_fdata(out$features)
+    metadata(object)$sma <- out$variances
 # Filter for minvar
     object %<>% .filter_minvar('lda', minvar)
 # Return
     object
-}
+})
 
 
 #' @rdname pca
 #' @export
-pls <- function(object, ndim = 2, minvar = 0, verbose = FALSE){
+setMethod("pls", signature("matrix"),
+function(object, group, ndim=2, verbose=FALSE){
+    pls_out <- mixOmics::plsda(t(object), group, ncomp = ndim)
+    samples   <- pls_out$variates$X
+    features  <- pls_out$loadings$X
+    variances <- round(100*pls_out$explained_variance$X)
+    colnames(samples)  <- sprintf('pls%d', seq_len(ncol(samples)))
+    colnames(features) <- sprintf('pls%d', seq_len(ncol(features)))
+    names(variances)   <- sprintf('pls%d', seq_len(length(variances)))
+    list(samples=samples, features=features, variances=variances)
+})
+
+
+#' @rdname pca
+#' @export
+setMethod("pls", signature("SummarizedExperiment"),
+function(object, ndim=2, minvar=0, verbose=FALSE){
 # Assert
     if (!requireNamespace('mixOmics', quietly = TRUE)){
         stop("BiocManager::install('mixOmics'). Then re-run.")
@@ -281,24 +353,15 @@ pls <- function(object, ndim = 2, minvar = 0, verbose = FALSE){
     assert_all_are_in_range(minvar, 0, 100)
     . <- NULL
 # Transform
-    x <- t(exprs(object))
-    y <- subgroup_values(object)
-    pls_out <- mixOmics::plsda( x, y, ncomp = ndim)
-    samples   <- pls_out$variates$X
-    features  <- pls_out$loadings$X
-    variances <- round(100*pls_out$explained_variance$X)
-    colnames(samples)  <- sprintf('pls%d', seq_len(ncol(samples)))
-    colnames(features) <- sprintf('pls%d', seq_len(ncol(features)))
-    names(variances)   <- sprintf('pls%d', seq_len(length(variances)))
-# Add
-    object %<>% merge_sdata(samples)
-    object %<>% merge_fdata(features)
-    metadata(object)$pls <- variances
-# Filter for minvar
+    groups <- subgroup_values(object)
+    out <- pls(exprs(object), groups=groups, ndim=ndim, verbose=verbose)
+# Add/Filter/Return
+    object %<>% merge_sdata(out$samples)
+    object %<>% merge_fdata(out$features)
+    metadata(object)$pls <- out$variances
     object %<>% .filter_minvar('pls', minvar)
-# Return
     object
-}
+})
 
 
 #' @param object  SummarizedExperiment

@@ -145,14 +145,6 @@ plot_sample_boxplots <- function(object, fill = subgroup, color = NULL, ...,
 #==============================================================================
 
 
-#' @rdname biplot
-#' @export
-plot_biplot <- function(...){
-    .Deprecated('biplot')
-    biplot(...)
-}
-
-
 #' Biplot
 #' @param object         SummarizedExperiment
 #' @param x              pca1, etc.
@@ -165,56 +157,26 @@ plot_biplot <- function(...){
 #' @param nloadings      number of loadings per half-axis to plot
 #' @return ggplot object
 #' @examples
-#' file <- download_data('halama18.metabolon.xlsx')
-#' object <- read_metabolon(file, plot = FALSE)
-#' biplot(object)
-#' biplot(object, x=pca1, y=pca2)
-#' biplot(object, x=pls1, y=pls2)
-#' biplot(object, x=pca3, y=pca4)
-#' biplot(object, nloadings = 0)
-#' biplot(object, color = TIME_POINT)
-#' biplot(object, color = NULL)
+#' # Read data
+#'     file <- download_data('halama18.metabolon.xlsx')
+#'     object <- read_metabolon(file, plot = FALSE)
+#' # biplot.SummarizedExperiment
+#'     biplot(object)
+#'     biplot(object, x=pca1, y=pca2)
+#'     biplot(object, x=pls1, y=pls2)
+#'     biplot(object, x=lda1, y=lda2)
+#'     biplot(object, x=pca3, y=pca4)
+#'     biplot(object, nloadings = 1)
+#'     biplot(object, color = TIME_POINT)
+#'     biplot(object, color = NULL)
+#'# biplot.matrix
+#'     object %<>% exprs()
 #' @export
-biplot <- function(object, x=pca1, y=pca2, color = subgroup, label = NULL,
-    feature_label = feature_name, ...,
-    fixed = list(shape=15, size=3), nloadings = 1
-){
-    x     <- enquo(x)
-    y     <- enquo(y)
-    label <- enquo(label)
-    xstr <- as_name(x)
-    ystr <- as_name(y)
-    methodx <- substr(xstr, 1, 3)
-    methody <- substr(ystr, 1, 3)
-    xdim <- xstr %>% substr(4, nchar(.)) %>% as.numeric()
-    ydim <- ystr %>% substr(4, nchar(.)) %>% as.numeric()
-
-    object %<>% get(methodx)(ndim=xdim, verbose = FALSE)
-    object %<>% get(methody)(ndim=ydim, verbose = FALSE)
-    color <- enquo(color)
-    feature_label <- enquo(feature_label)
-    dots  <- enquos(...)
-    fixed %<>% extract(setdiff(names(fixed), names(dots)))
-
-    xlab  <- paste0(xstr, ' : ', metadata(object)[[methodx]][[xstr]],'% ')
-    ylab  <- paste0(ystr, ' : ', metadata(object)[[methody]][[ystr]],'% ')
-
-    p <- ggplot() + theme_bw() + ggplot2::xlab(xlab) + ggplot2::ylab(ylab)
-    p <- p + ggtitle(paste0(unique(c(methodx, methody)), collapse = '/'))
-    p %<>% add_loadings(
-            object, !!x, !!y, label = !!feature_label, nloadings = nloadings)
-    p %<>% add_scores(object, !!x, !!y, color = !!color, !!!dots, fixed = fixed)
-    p %<>% add_color_scale(!!color, data = sdata(object))
-
-    if (!quo_is_null(label)){
-        p <- p + geom_text_repel(
-                    aes(x=!!x, y=!!y, label=!!label), data=sdata(object))}
-
-    p
-}
+setGeneric('biplot',
+function(object, ...)  standardGeneric("biplot"), signature = "object")
 
 add_scores <- function(
-    p, object, x = pca1, y = pca2, color = subgroup, ...,
+    p, sdata, x = pca1, y = pca2, color = subgroup, ...,
     fixed = list(shape=15, size=3)
 ){
     x     <- enquo(x)
@@ -224,40 +186,35 @@ add_scores <- function(
     p + layer(  geom = 'point',
                 mapping = aes(x = !!x, y = !!y, color = !!color, ...),
                 stat    = "identity",
-                data    = sdata(object),
+                data    = sdata,
                 params  = fixed,
                 position= 'identity')
 
 }
 
-
 add_loadings <- function(
-    p, object, x = pca1, y = pca2, label = feature_name, nloadings = 1
+    p, fdata, sdata, x = pca1, y = pca2, label = feature_name, nloadings = 1
 ){
 # Process args
     if (nloadings==0) return(p)
-    x     <- enquo(x)
-    y     <- enquo(y)
+    x     <- enquo(x);  xstr <- rlang::as_name(x)
+    y     <- enquo(y);  ystr <- rlang::as_name(y)
     label <- enquo(label)
-    xstr <- rlang::as_name(x)
-    ystr <- rlang::as_name(y)
 # Loadings
-    xloadings <- fdata(object)[[xstr]]
-    yloadings <- fdata(object)[[ystr]]
+    xloadings <- fdata[[xstr]]
+    yloadings <- fdata[[ystr]]
     idx <- unique(c(headtail(order(xloadings, na.last=NA), nloadings),
                     headtail(order(yloadings, na.last=NA), nloadings)))
 # Scale loadings to scoreplot
-    xscores <- sdata(object)[[xstr]]
-    yscores <- sdata(object)[[ystr]]
+    xscores <- sdata[[xstr]]
+    yscores <- sdata[[ystr]]
     maxscore <- min(abs(min(c(xscores, yscores, na.rm=TRUE))),
                     abs(max(c(xscores, yscores, na.rm=TRUE))), na.rm=TRUE)
     scorefactor <- maxscore/max(abs(c(xloadings, yloadings)),  na.rm=TRUE)
-
-    plotdt <- fdata(object)
+    plotdt <- fdata
     plotdt[[xstr]] %<>% multiply_by(scorefactor)
     plotdt[[ystr]] %<>% multiply_by(scorefactor)
     plotdt %<>% extract(idx, )
-
 # Plot
     feature_name <- NULL
     if (!'feature_name' %in% names(plotdt)){
@@ -275,6 +232,69 @@ add_loadings <- function(
                 params   = list(alpha = 0.5, na.rm = TRUE),
                 position ='identity')
 }
+
+
+#' @rdname biplot
+#' @export
+setMethod("biplot", signature("matrix"),
+function(object, x=pca1, y=pca2, color=subgroup, group=subgroup, label = NULL,
+         feature_label = feature_name, ..., sampledata, featuredata,
+         fixed = list(shape=15, size=3), nloadings = 0
+){
+    x     <- enquo(x);     xstr <- as_name(x)
+    y     <- enquo(y);     ystr <- as_name(y)
+    group <- enquo(group)
+    color <- enquo(color)
+    label <- enquo(label)
+    dots  <- enquos(...)
+    fixed %<>% extract(setdiff(names(fixed), names(dots)))
+    feature_label <- enquo(feature_label)
+    methodx <- substr(xstr, 1, 3)
+    methody <- substr(ystr, 1, 3)
+    xdim <- xstr %>% substr(4, nchar(.)) %>% as.numeric()
+    ydim <- ystr %>% substr(4, nchar(.)) %>% as.numeric()
+    groups <- rlang::eval_tidy(group, data=sampledata)
+    outx <- get(methodx)(object, groups, ndim=xdim, verbose = FALSE)
+    outy <- get(methody)(object, groups, ndim=ydim, verbose = FALSE)
+
+    sampledata  %<>% data.table()
+    featuredata %<>% data.table()
+    sampledata[, (xstr) := outx$samples[, xstr]]
+    sampledata[, (ystr) := outy$samples[, ystr]]
+    featuredata[,(xstr) := outx$features[,xstr]]
+    featuredata[,(ystr) := outy$features[,ystr]]
+
+    xlab  <- paste0(xstr, ' : ', outx$variances[[xstr]],'% ')
+    ylab  <- paste0(ystr, ' : ', outy$variances[[ystr]],'% ')
+
+    p <- ggplot() + theme_bw() + ggplot2::xlab(xlab) + ggplot2::ylab(ylab)
+    p <- p + ggtitle(paste0(unique(c(methodx, methody)), collapse = '/'))
+    p %<>% add_scores(sampledata, x=!!x, y=!!y, color = !!color, !!!dots,
+                      fixed = fixed)
+    p %<>% add_loadings(fdata=featuredata, sdata=sampledata, x = !!x, y = !!y,
+                        label = !!feature_label, nloadings = nloadings)
+    if (!quo_is_null(label)) p <- p + geom_text_repel(
+            aes(x=!!x, y=!!y, label=!!label), data=sampledata)
+    p %<>% add_color_scale(!!color, sampledata)
+    p
+
+})
+
+#' @rdname biplot
+#' @export
+setMethod("biplot", signature("SummarizedExperiment"),
+function(object, x=pca1, y=pca2, group=subgroup, color=subgroup, label = NULL,
+    feature_label = feature_name, ...,
+    fixed = list(shape=15, size=3), nloadings = 0
+){
+    biplot(exprs(object), x=!!enquo(x), y=!!enquo(y), group=!!enquo(group),
+           color=!!enquo(color), label=!!enquo(label),
+           feature_label=!!enquo(feature_label), ...,
+           sampledata = sdata(object), featuredata = fdata(object),
+           fixed = fixed)
+})
+
+
 
 
 

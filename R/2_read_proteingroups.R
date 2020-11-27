@@ -886,8 +886,8 @@ PHOSPHOSITE_FVARS <- c('id', 'Protein group IDs', 'Proteins', 'Protein names',
     object %<>% filter_maxquant_samples(rm_subgroups = rm_subgroups, verbose)
 # Transform
     if (verbose)  message('\tLog2 transform')
-    object %<>% zero_to_na(verbose = verbose)
-    object %<>% nan_to_na(verbose = verbose)
+    exprs(object) %<>% zero_to_na(verbose = verbose)
+    exprs(object) %<>% nan_to_na(verbose = verbose)
     object %<>% log2transform(verbose=verbose)
     object %<>% invert(invert_subgroups)
 # Return
@@ -932,8 +932,8 @@ PHOSPHOSITE_FVARS <- c('id', 'Protein group IDs', 'Proteins', 'Protein names',
     object %<>% filter_maxquant_samples(rm_subgroups = rm_subgroups, verbose)
 # Log2 transform
     if (verbose)  message('\tLog2 transform')
-    object %<>% zero_to_na(verbose = verbose)
-    object %<>% nan_to_na(verbose = verbose)
+    exprs(object) %<>% zero_to_na(verbose = verbose)
+    exprs(object) %<>% nan_to_na(verbose = verbose)
     object %<>% log2transform(verbose=verbose)
     object %<>% invert(invert_subgroups)
 # Return
